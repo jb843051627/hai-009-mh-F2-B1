@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('急诊分诊录入')"/>
+</head>
+<body>
+<form class="layui-form">
+    <div class="mainBox">
+        <div class="main-container">
+            <div class="layui-form-item">
+                <label class="layui-form-label">分诊途径</label>
+                <div class="layui-input-block">
+                    <select name="road" lay-verify="required">
+                        <option value="急诊">急诊</option>
+                        <option value="门诊">门诊</option>
+                        <option value="留观">留观</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">症状得分</label>
+                <div class="layui-input-block">
+                    <input type="text" name="rawScore" autocomplete="off"
+                           placeholder="护士按症状逐项录入后的总得分（0~100）；为空按退回处理" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">分诊发生时点</label>
+                <div class="layui-input-block">
+                    <input type="text" name="triageAt" id="triageAt" autocomplete="off"
+                           placeholder="留空按当前时刻；补录旧单必须填当时的分诊时点，定级只认当时生效的线"
+                           class="layui-input">
+                </div>
+            </div>
+            <!-- 级别 / 判定线代号 / 线起用日：页面不预填，全部随后台回值落单后回显 -->
+            <div class="layui-form-item" id="result-box" style="display:none;">
+                <label class="layui-form-label">定级结果</label>
+                <div class="layui-input-block">
+                    <table class="layui-table" style="margin-top:10px;">
+                        <tbody>
+                        <tr><td style="width:120px;">分诊单号</td><td id="r-ticket"></td></tr>
+                        <tr><td>判定级别</td><td id="r-level"></td></tr>
+                        <tr><td>判定线代号</td><td id="r-rule"></td></tr>
+                        <tr><td>判定线起用日</td><td id="r-eff"></td></tr>
+                        <tr><td>说明</td><td id="r-msg"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="button-container">
+            <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit="" lay-filter="triage-grade">
+                <i class="layui-icon layui-icon-ok"></i>
+                定级并落单
+            </button>
+            <button type="reset" class="layui-btn layui-btn-primary layui-btn-sm" id="btn-reset">
+                <i class="layui-icon layui-icon-refresh"></i>
+                重填
+            </button>
+        </div>
+    </div>
+</form>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['form', 'jquery', 'laydate'], function () {
+        let form = layui.form;
+        let $ = layui.jquery;
+        let laydate = layui.laydate;
+        let MODULE_PATH = rootPath + "/MhTriageController";
+
+        laydate.render({elem: '#triageAt', type: 'datetime', format: 'yyyy-MM-dd HH:mm:ss'});
+
+        function hideResult() {
+            $('#result-box').hide();
+            $('#r-ticket,#r-level,#r-rule,#r-eff,#r-msg').text('');
+        }
+
+        $('#btn-reset').on('click', function () {
+            setTimeout(hideResult, 10);
+        });
+
+        // 定级由后台算完写死：页面只送 途径/得分/分诊时点，不送级别与判定线
+        form.on('submit(triage-grade)', function (data) {
+            $.ajax({
+                url: MODULE_PATH + '/grade',
+                data: data.field,
+                dataType: 'json',
+                type: 'post',
+                success: function (result) {
+                    if (result.code !== 200) {
+                        // 退回重录：不落单，护士照原话改
+                        layer.msg(result.msg, {icon: 2, time: 2500});
+                        hideResult();
+                        return;
+                    }
+                    let d = result.data || {};
+                    $('#result-box').show();
+                    $('#r-ticket').text(d.ticketNo || '');
+                    if (d.noRule) {
+                        // 已落单但无可用标准：单上明写，级别与线代号留空，不许凑合
+                        $('#r-level').html('<span style="color:#FF5722;">无可用标准（级别留空）</span>');
+                        $('#r-rule').text('（无）');
+                        $('#r-eff').text('（无）');
+                    } else {
+                        let names = {1: '危重', 2: '紧急', 3: '普通', 4: '非急症'};
+                        $('#r-level').html('<b>' + (names[d.level] || d.level) + '</b>（第 ' + d.level + ' 档）');
+                        $('#r-rule').text(d.ruleCode || '');
+                        $('#r-eff').text(d.ruleEffStart || '');
+                    }
+                    $('#r-msg').text(result.msg || d.message || '');
+                    layer.msg('已落单', {icon: 1, time: 1200});
+                }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

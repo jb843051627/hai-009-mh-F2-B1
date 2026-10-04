@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('急诊分诊单复核')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">分诊单号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="ticketNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">分诊途径</label>
+                <div class="layui-input-inline">
+                    <select name="road" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="急诊">急诊</option>
+                        <option value="门诊">门诊</option>
+                        <option value="留观">留观</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">判定级别</label>
+                <div class="layui-input-inline">
+                    <select name="levelNum" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="1">危重</option>
+                        <option value="2">紧急</option>
+                        <option value="3">普通</option>
+                        <option value="4">非急症</option>
+                        <option value="0">无可用标准</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">复核情形</label>
+                <div class="layui-input-inline">
+                    <select name="status" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="0">待复核</option>
+                        <option value="1">已复核</option>
+                        <option value="2">退回重录</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="triage-query">
+                    <i class="layui-icon layui-icon-search"></i>
+                    查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i>
+                    重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="triage-table" lay-filter="triage-table"></table>
+    </div>
+</div>
+
+<script type="text/html" id="triage-toolbar">
+    <button class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i>
+        护士分诊录入
+    </button>
+</script>
+
+<script type="text/html" id="triage-level">
+    {{#  if(d.levelNum === 0){ }}<span style="color:#FF5722;">无可用标准</span>
+    {{#  } else if(d.levelNum === 1){ }}<span style="color:#FF0000;font-weight:bold;">危重</span>
+    {{#  } else if(d.levelNum === 2){ }}<span style="color:#FFB800;font-weight:bold;">紧急</span>
+    {{#  } else if(d.levelNum === 3){ }}普通
+    {{#  } else if(d.levelNum === 4){ }}非急症
+    {{#  } }}
+</script>
+
+<script type="text/html" id="triage-rule">
+    {{#  if(d.ruleCode){ }}{{ d.ruleCode }}<br><span style="color:#999;font-size:12px;">起用日 {{ d.ruleEffStart || '' }}</span>
+    {{#  } else { }}<span style="color:#FF5722;">（无）</span>{{#  } }}
+</script>
+
+<script type="text/html" id="triage-review">
+    {{#  if(d.reviewLevel !== null && d.reviewLevel !== undefined){ }}
+    {{#  if(d.reviewLevel === 0){ }}<span style="color:#FF5722;">复查无可用标准</span>
+    {{#  } else { }}复查第 {{ d.reviewLevel }} 档（{{ d.reviewedAt || '' }}）{{#  } }}
+    {{#  } else { }}<span style="color:#999;">未复查</span>{{#  } }}
+</script>
+
+<script type="text/html" id="triage-status">
+    {{#  if(d.status === 0){ }}<span style="color:#FFB800;">待复核</span>
+    {{#  } else if(d.status === 1){ }}<span style="color:#009688;">已复核</span>
+    {{#  } else { }}<span style="color:#FF5722;">退回重录</span>{{#  } }}
+</script>
+
+<script type="text/html" id="triage-bar">
+    <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="review">
+        <i class="layui-icon layui-icon-ok"></i> 按单上线复查
+    </button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/MhTriageController/";
+
+        let cols = [[
+            {title: 'ID', field: 'id', align: 'center', hide: true},
+            {title: '分诊单号', field: 'ticketNo', align: 'center', width: 230},
+            {title: '途径', field: 'road', align: 'center', width: 70},
+            {title: '原始得分', field: 'rawScore', align: 'center', width: 90},
+            {title: '判定级别', field: 'levelNum', align: 'center', width: 110, templet: '#triage-level'},
+            {title: '所用判定线', field: 'ruleCode', align: 'center', width: 220, templet: '#triage-rule'},
+            {title: '分诊时点', field: 'triageAt', align: 'center', width: 170},
+            {title: '复查结论', field: 'reviewLevel', align: 'center', width: 210, templet: '#triage-review'},
+            {title: '情形', field: 'status', align: 'center', width: 90, templet: '#triage-status'},
+            {title: '操作', toolbar: '#triage-bar', align: 'center', width: 150}
+        ]];
+
+        table.render({
+            elem: '#triage-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'post',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#triage-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(triage-query)', function (data) {
+            table.reload('triage-table', {where: data.field, page: {curr: 1}});
+            return false;
+        });
+
+        table.on('toolbar(triage-table)', function (obj) {
+            if (obj.event === 'add') {
+                layer.open({type: 2, title: '护士分诊录入', area: ['720px', '640px'],
+                    content: rootPath + '/MhTriageController/add',
+                    end: function () { table.reload('triage-table'); }});
+            }
+        });
+
+        // 复查只认单上记的线代号，按分诊当时口径重判；原级别不会被今天的标准覆盖
+        table.on('tool(triage-table)', function (obj) {
+            if (obj.event === 'review') {
+                layer.confirm('只按本单所记判定线【' + (obj.data.ruleCode || '（无）')
+                    + '】在分诊时点的口径重判，不改动原级别。是否复查？', {title: '复查确认'}, function (idx) {
+                    layer.close(idx);
+                    $.ajax({
+                        url: MODULE_PATH + 'review/' + obj.data.id,
+                        dataType: 'json',
+                        type: 'post',
+                        success: function (result) {
+                            if (result.code === 200) {
+                                layer.msg(result.msg, {icon: 1, time: 1500}, function () {
+                                    table.reload('triage-table');
+                                });
+                            } else {
+                                layer.msg(result.msg, {icon: 2, time: 2000});
+                            }
+                        }
+                    });
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>
