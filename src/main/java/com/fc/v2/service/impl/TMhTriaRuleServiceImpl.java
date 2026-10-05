@@ -41,7 +41,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
     private static final int PRIORITY_NULL = Integer.MIN_VALUE;
 
     /**
-     * 赢线裁决：顺位降序；顺位并列按代号字典序升序（"代号排前一条"），年年同讲法、不随时间变。
+     * 赢线裁决：顺位降序；顺位并列按代号字典序降序（"代号排后一条"赢），年年同讲法、不随时间变。
      * 代号为空当作最小，永远赢不了并列局。
      */
     private static final Comparator<TMhTriaRule> BY_PRIORITY_THEN_CODE_DESC = new Comparator<TMhTriaRule>() {
@@ -54,7 +54,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
             }
             String ca = a.getRuleCode() == null ? "" : a.getRuleCode();
             String cb = b.getRuleCode() == null ? "" : b.getRuleCode();
-            return ca.compareTo(cb);
+            return cb.compareTo(ca);
         }
     };
 
@@ -267,19 +267,15 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
         return !e.startsWith("0000-00-00");
     }
 
-    /** 按代号取该时点生效的线；同代号多版（脏数据/换版重叠）时按裁决序取赢的一条 */
+    /** 按代号取该时点生效的线；同代号多版（脏数据/换版重叠）时按裁决序取赢的一条；该时点不在窗口一律取不到 */
     private TMhTriaRule findRuleByCode(String ruleCode, Date at, Integer status) {
         if (ruleCode == null || at == null) {
             return null;
         }
         TMhTriaRule best = null;
-        TMhTriaRule fallback = null;
         for (TMhTriaRule r : loadRules(status)) {
             if (!ruleCode.equals(r.getRuleCode())) {
                 continue;
-            }
-            if (fallback == null) {
-                fallback = r;
             }
             if (!inWindow(r, at)) {
                 continue;
@@ -288,8 +284,8 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
                 best = r;
             }
         }
-        // 该时点一条生效版本都没有时，退回同代号的第一条接着判，别让这一单没有档位
-        return best != null ? best : fallback;
+        // 该时点一条生效版本都没有就是取不到：不许拿窗口外的版本凑合，复查按无可用标准明写
+        return best;
     }
 
     /**

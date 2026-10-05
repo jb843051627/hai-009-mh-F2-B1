@@ -17,8 +17,13 @@ import org.junit.jupiter.api.BeforeEach;
 import com.baomidou.mybatisplus.core.config.GlobalConfig;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.fc.v2.mapper.auto.TMhOrderExecMapper;
+import com.fc.v2.mapper.auto.TMhOrderMapper;
+import com.fc.v2.mapper.auto.TMhOrderTransferMapper;
 import com.fc.v2.mapper.auto.TMhTriaRuleMapper;
 import com.fc.v2.mapper.auto.TMhVisitRowMapper;
+import com.fc.v2.service.impl.TMhOrderExecServiceImpl;
+import com.fc.v2.service.impl.TMhOrderServiceImpl;
 import com.fc.v2.service.impl.TMhTriaRuleServiceImpl;
 import com.fc.v2.service.impl.TMhVisitRowServiceImpl;
 
@@ -32,8 +37,13 @@ public abstract class AbstractH2Test {
     protected SqlSession session;
     protected TMhTriaRuleMapper triaRuleMapper;
     protected TMhVisitRowMapper visitRowMapper;
+    protected TMhOrderMapper orderMapper;
+    protected TMhOrderExecMapper orderExecMapper;
+    protected TMhOrderTransferMapper orderTransferMapper;
     protected TMhTriaRuleServiceImpl triaRuleService;
     protected TMhVisitRowServiceImpl visitRowService;
+    protected TMhOrderServiceImpl orderService;
+    protected TMhOrderExecServiceImpl orderExecService;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -47,6 +57,9 @@ public abstract class AbstractH2Test {
         configuration.setMapUnderscoreToCamelCase(true);
         configuration.addMapper(TMhTriaRuleMapper.class);
         configuration.addMapper(TMhVisitRowMapper.class);
+        configuration.addMapper(TMhOrderMapper.class);
+        configuration.addMapper(TMhOrderExecMapper.class);
+        configuration.addMapper(TMhOrderTransferMapper.class);
 
         GlobalConfig globalConfig = new GlobalConfig();
         globalConfig.setDbConfig(new GlobalConfig.DbConfig());
@@ -60,6 +73,9 @@ public abstract class AbstractH2Test {
         this.session = factory.openSession(true);
         this.triaRuleMapper = session.getMapper(TMhTriaRuleMapper.class);
         this.visitRowMapper = session.getMapper(TMhVisitRowMapper.class);
+        this.orderMapper = session.getMapper(TMhOrderMapper.class);
+        this.orderExecMapper = session.getMapper(TMhOrderExecMapper.class);
+        this.orderTransferMapper = session.getMapper(TMhOrderTransferMapper.class);
 
         this.triaRuleService = new TMhTriaRuleServiceImpl();
         inject(this.triaRuleService, "mhTriaRuleMapper", this.triaRuleMapper);
@@ -67,6 +83,14 @@ public abstract class AbstractH2Test {
         this.visitRowService = new TMhVisitRowServiceImpl();
         inject(this.visitRowService, "mhVisitRowMapper", this.visitRowMapper);
         inject(this.visitRowService, "triaRuleService", this.triaRuleService);
+
+        this.orderExecService = new TMhOrderExecServiceImpl();
+        inject(this.orderExecService, "mhOrderExecMapper", this.orderExecMapper);
+
+        this.orderService = new TMhOrderServiceImpl();
+        inject(this.orderService, "mhOrderMapper", this.orderMapper);
+        inject(this.orderService, "mhOrderTransferMapper", this.orderTransferMapper);
+        inject(this.orderService, "orderExecService", this.orderExecService);
     }
 
     @AfterEach
@@ -76,7 +100,7 @@ public abstract class AbstractH2Test {
         }
     }
 
-    private static void inject(Object target, String field, Object value) throws Exception {
+    protected static void inject(Object target, String field, Object value) throws Exception {
         java.lang.reflect.Field f = target.getClass().getDeclaredField(field);
         f.setAccessible(true);
         f.set(target, value);
