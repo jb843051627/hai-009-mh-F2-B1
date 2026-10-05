@@ -41,7 +41,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
     private static final int PRIORITY_NULL = Integer.MIN_VALUE;
 
     /**
-     * 赢线裁决：顺位降序；顺位并列按代号字典序升序（"代号排前一条"），年年同讲法、不随时间变。
+     * 赢线裁决：顺位降序；顺位并列按代号字典序排后一条赢（"代号排后一条"），年年同讲法、不随时间变。
      * 代号为空当作最小，永远赢不了并列局。
      */
     private static final Comparator<TMhTriaRule> BY_PRIORITY_THEN_CODE_DESC = new Comparator<TMhTriaRule>() {
@@ -54,7 +54,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
             }
             String ca = a.getRuleCode() == null ? "" : a.getRuleCode();
             String cb = b.getRuleCode() == null ? "" : b.getRuleCode();
-            return ca.compareTo(cb);
+            return cb.compareTo(ca);
         }
     };
 
@@ -227,7 +227,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
     }
 
     /**
-     * 生效窗口：起用日与交棒日都算在窗口内。
+     * 生效窗口：含起用日、不含交棒日（旧线管到交棒前一刻，新线从交棒那一刻起）。
      * 起用日为空视为早已生效；交棒日为空（含早期导入的 0000-00-00 脏值）视为长期有效。
      */
     private boolean inWindow(TMhTriaRule r, Date at) {
@@ -238,7 +238,7 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
             e = null;
         }
         boolean started = (s == null) || s.compareTo(now) <= 0;
-        boolean notEnded = (e == null) || now.compareTo(e) <= 0;
+        boolean notEnded = (e == null) || now.compareTo(e) < 0;
         return started && notEnded;
     }
 
@@ -273,13 +273,9 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
             return null;
         }
         TMhTriaRule best = null;
-        TMhTriaRule fallback = null;
         for (TMhTriaRule r : loadRules(status)) {
             if (!ruleCode.equals(r.getRuleCode())) {
                 continue;
-            }
-            if (fallback == null) {
-                fallback = r;
             }
             if (!inWindow(r, at)) {
                 continue;
@@ -288,8 +284,8 @@ public class TMhTriaRuleServiceImpl implements ITMhTriaRuleService {
                 best = r;
             }
         }
-        // 该时点一条生效版本都没有时，退回同代号的第一条接着判，别让这一单没有档位
-        return best != null ? best : fallback;
+        // 该时点一条生效版本都没有就是 null：不许拿窗口外的版本凑合，由调用方按"无可用标准"明写
+        return best;
     }
 
     /**

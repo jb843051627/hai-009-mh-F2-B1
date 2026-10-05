@@ -166,3 +166,93 @@ VALUES
    '2026-01-01 00:00:00', NULL, 100, 0, 0, 'seed', NOW(), '今年现行，交棒时刻起管新单'),
   (102, 'TRIAGE-EARLY', '早期入册线（紧急档未设）', '急诊', 15.00, NULL, 50.00,
    '2026-01-01 00:00:00', NULL, 10, 0, 0, 'seed', NOW(), '顺位低，默认不参选；二档界值为空，命中时跳过紧急档');
+
+-- =====================================================================
+-- 住院医嘱执行闭环（hai-009 增补）。全院口径就这一处，定死如下：
+--
+-- 1) 执行笔幂等：一次计划执行 = (order_no, dose_seq)，全库唯一。同一份医嘱点两次、
+--    交接班两人同时提交、网络重试，撞的都是同一个键，库里永远只有一笔；
+--    撞键的一律按"重放"返回已落的那笔，不再落第二笔。
+-- 2) 闭环判定单一口径：一张单只适用一种算法，由 order_type 定死，不存在两种都算数。
+--    按次数型：有效执行笔数（执行人非空）达到 need_count 才闭环；
+--    按时段型：过了 period_end 且期内有有效执行才闭环，期内零有效执行到期也不闭环。
+--    判定只走 TMhOrderServiceImpl 一处，页面、定时任务、补登都调同一口径。
+-- 3) 转科归属：医嘱随病人走。owner_dept 是唯一认领方，转科那一刻换边并写移交流水，
+--    原科室清单即刻摘除，任何时点一张单只挂一头；执行笔上的 dept_no 是发生时的快照，
+--    不随转科改，白班夜班对账看快照。
+-- 4) 审方驳回后坚持要发：必须走强制放行，override_by/override_at/override_reason
+--    三样落单才准发药执行，事后按单查得到谁批的；缺一样都不放行。
+-- 5) 往年补录：缺执行人的补录笔不算闭环进度，单进 close_status=2 补录待核，
+--    补登执行人后按同一口径重算；自动闭环任务不动补录待核的单。
+-- 6) 列表与详情同口径：两处执行条数都出自 t_mh_order_exec 的同一条 COUNT，
+--    不经任何 JOIN 放大，加起来的数就是库里的数。
+-- 7) 并发与重试：执行落笔与闭环推进同一事务；闭环状态由执行笔派生重算、
+--    条件更新兜底，重试重放不改变终态。
+CREATE TABLE IF NOT EXISTS t_mh_order (
+  id bigint NOT NULL COMMENT '主键',
+  order_no varchar(64) NOT NULL COMMENT '医嘱单号',
+  patient_no varchar(64) DEFAULT NULL COMMENT '患者底档代号',
+  owner_dept varchar(64) DEFAULT NULL COMMENT '当前归属科室（唯一认领方，转科只改这里）',
+  order_type int DEFAULT NULL COMMENT '闭环算法 1按次数 2按时段（一张单只适用一种）',
+  need_count int DEFAULT NULL COMMENT '应执行次数（按次数型必填）',
+  period_start datetime DEFAULT NULL COMMENT '执行时段起（按时段型必填，含）',
+  period_end datetime DEFAULT NULL COMMENT '执行时段止（按时段型必填，不含）',
+  review_status int DEFAULT NULL COMMENT '审方情形 0待审 1通过 2驳回 3驳回后强制放行',
+  review_by varchar(64) DEFAULT NULL COMMENT '审方人',
+  review_at datetime DEFAULT NULL COMMENT '审方时点',
+  review_comment varchar(500) DEFAULT NULL COMMENT '审方意见',
+  override_by varchar(64) DEFAULT NULL COMMENT '强制放行审批人（驳回后坚持要发必落）',
+  override_at datetime DEFAULT NULL COMMENT '强制放行时点',
+  override_reason varchar(500) DEFAULT NULL COMMENT '强制放行理由',
+  dispense_status int DEFAULT NULL COMMENT '发药情形 0未发药 1已发药',
+  dispense_by varchar(64) DEFAULT NULL COMMENT '发药人',
+  dispensed_at datetime DEFAULT NULL COMMENT '发药时点',
+  backfill int DEFAULT '0' COMMENT '往年补录单 0否 1是（补录单审方发药从略置妥）',
+  close_status int DEFAULT NULL COMMENT '闭环情形 0未闭环 1已闭环 2补录待核',
+  closed_at datetime DEFAULT NULL COMMENT '闭环达成时点',
+  status int DEFAULT NULL COMMENT '单情形 0在办 1已停嘱',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_order_no (order_no),
+  KEY idx_owner (status, del_flag, owner_dept)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='住院医嘱单';
+
+CREATE TABLE IF NOT EXISTS t_mh_order_exec (
+  id bigint NOT NULL COMMENT '主键',
+  order_no varchar(64) NOT NULL COMMENT '所属医嘱单号',
+  dose_seq int NOT NULL COMMENT '计划内第几次（与 order_no 组成幂等键）',
+  exec_by varchar(64) DEFAULT NULL COMMENT '执行人（正常执行必填；往年补录可空，空则不计闭环）',
+  exec_at datetime DEFAULT NULL COMMENT '执行时点',
+  dept_no varchar(64) DEFAULT NULL COMMENT '执行时归属科室快照（不随转科改，对账看这里）',
+  backfill int DEFAULT '0' COMMENT '该笔为补录 0否 1是',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_order_dose (order_no, dose_seq)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='医嘱执行记录';
+
+CREATE TABLE IF NOT EXISTS t_mh_order_transfer (
+  id bigint NOT NULL COMMENT '主键',
+  order_no varchar(64) NOT NULL COMMENT '被移交医嘱单号',
+  from_dept varchar(64) DEFAULT NULL COMMENT '交出科室',
+  to_dept varchar(64) DEFAULT NULL COMMENT '承接科室',
+  moved_by varchar(64) DEFAULT NULL COMMENT '移交操作人',
+  moved_at datetime DEFAULT NULL COMMENT '移交时点',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  KEY idx_order_no (order_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='医嘱转科移交流水';

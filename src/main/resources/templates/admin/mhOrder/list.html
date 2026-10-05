@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('住院医嘱执行闭环')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">医嘱单号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="orderNo" class="layui-input">
+                </div>
+                <label class="layui-form-label">归属科室</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="ownerDept" class="layui-input" placeholder="当前认领方，只挂一头">
+                </div>
+                <label class="layui-form-label">闭环算法</label>
+                <div class="layui-input-inline">
+                    <select name="orderType" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="1">按次数</option>
+                        <option value="2">按时段</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">审方情形</label>
+                <div class="layui-input-inline">
+                    <select name="reviewStatus" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="0">待审</option>
+                        <option value="1">通过</option>
+                        <option value="2">驳回</option>
+                        <option value="3">强制放行</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">闭环情形</label>
+                <div class="layui-input-inline">
+                    <select name="closeStatus" class="layui-input">
+                        <option value="">全部</option>
+                        <option value="0">未闭环</option>
+                        <option value="1">已闭环</option>
+                        <option value="2">补录待核</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="order-query">
+                    <i class="layui-icon layui-icon-search"></i>
+                    查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i>
+                    重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="order-table" lay-filter="order-table"></table>
+    </div>
+</div>
+
+<div id="exec-detail" style="display:none; padding: 10px;">
+    <table id="exec-table" lay-filter="exec-table"></table>
+</div>
+
+<script type="text/html" id="order-toolbar">
+    <button class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i>
+        录医嘱
+    </button>
+</script>
+
+<script type="text/html" id="order-type">
+    {{#  if(d.orderType === 1){ }}按次数（需 {{ d.needCount }} 次）
+    {{#  } else if(d.orderType === 2){ }}按时段<br><span style="color:#999;font-size:12px;">{{ d.periodStart || '' }} ~ {{ d.periodEnd || '' }}</span>
+    {{#  } }}
+</script>
+
+<script type="text/html" id="order-review">
+    {{#  if(d.reviewStatus === 0){ }}<span style="color:#FFB800;">待审</span>
+    {{#  } else if(d.reviewStatus === 1){ }}<span style="color:#009688;">通过（{{ d.reviewBy || '' }}）</span>
+    {{#  } else if(d.reviewStatus === 2){ }}<span style="color:#FF5722;">驳回（{{ d.reviewBy || '' }}）</span>
+    {{#  } else { }}<span style="color:#FF9800;">强制放行</span><br><span style="color:#999;font-size:12px;">审批人 {{ d.overrideBy || '' }} {{ d.overrideAt || '' }}</span>{{#  } }}
+</script>
+
+<script type="text/html" id="order-close">
+    {{#  if(d.closeStatus === 1){ }}<span style="color:#009688;">已闭环</span><br><span style="color:#999;font-size:12px;">{{ d.closedAt || '' }}</span>
+    {{#  } else if(d.closeStatus === 2){ }}<span style="color:#FF5722;">补录待核</span>
+    {{#  } else { }}<span style="color:#FFB800;">未闭环</span>{{#  } }}
+</script>
+
+<script type="text/html" id="order-bar">
+    <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="execs">明细</button>
+    <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="execute">执行</button>
+    <button class="pear-btn pear-btn-sm" lay-event="transfer">转科</button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/MhOrderController/";
+
+        let cols = [[
+            {title: 'ID', field: 'id', align: 'center', hide: true},
+            {title: '医嘱单号', field: 'orderNo', align: 'center', width: 180},
+            {title: '患者', field: 'patientNo', align: 'center', width: 80},
+            {title: '归属科室', field: 'ownerDept', align: 'center', width: 100},
+            {title: '闭环算法', field: 'orderType', align: 'center', width: 210, templet: '#order-type'},
+            {title: '审方情形', field: 'reviewStatus', align: 'center', width: 170, templet: '#order-review'},
+            {title: '执行条数', field: 'execCount', align: 'center', width: 90},
+            {title: '闭环情形', field: 'closeStatus', align: 'center', width: 150, templet: '#order-close'},
+            {title: '操作', toolbar: '#order-bar', align: 'center', width: 200}
+        ]];
+
+        table.render({
+            elem: '#order-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'post',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#order-toolbar',
+            defaultToolbar: ['refresh', 'filter', 'print', 'exports']
+        });
+
+        form.on('submit(order-query)', function (data) {
+            table.reload('order-table', {where: data.field, page: {curr: 1}});
+            return false;
+        });
+
+        table.on('toolbar(order-table)', function (obj) {
+            if (obj.event === 'add') {
+                layer.open({type: 2, title: '录医嘱', area: ['760px', '640px'],
+                    content: rootPath + '/MhOrderController/add',
+                    end: function () { table.reload('order-table'); }});
+            }
+        });
+
+        function post(url, data, done) {
+            $.ajax({url: url, data: data, dataType: 'json', type: 'post',
+                success: function (result) {
+                    if (result.code === 200) {
+                        layer.msg(result.msg, {icon: 1, time: 1500}, function () {
+                            table.reload('order-table');
+                            if (done) { done(); }
+                        });
+                    } else {
+                        layer.msg(result.msg, {icon: 2, time: 2500});
+                    }
+                }});
+        }
+
+        table.on('tool(order-table)', function (obj) {
+            let no = obj.data.orderNo;
+            if (obj.event === 'execs') {
+                // 明细条数与列表"执行条数"同一条 COUNT，两处必然对得上
+                layer.open({type: 1, title: '执行明细（' + no + '）', area: ['860px', '480px'],
+                    content: $('#exec-detail')});
+                table.render({
+                    elem: '#exec-table',
+                    url: MODULE_PATH + 'execList?orderNo=' + encodeURIComponent(no),
+                    method: 'post',
+                    page: false,
+                    cols: [[
+                        {title: '第几次', field: 'doseSeq', align: 'center', width: 90},
+                        {title: '执行人', field: 'execBy', align: 'center', width: 140,
+                            templet: function (d) { return d.execBy || '<span style="color:#FF5722;">（补录缺执行人）</span>'; }},
+                        {title: '执行时点', field: 'execAt', align: 'center', width: 180},
+                        {title: '发生时归属科室', field: 'deptNo', align: 'center', width: 140},
+                        {title: '补录笔', field: 'backfill', align: 'center', width: 90,
+                            templet: function (d) { return d.backfill === 1 ? '是' : '否'; }}
+                    ]]
+                });
+            } else if (obj.event === 'execute') {
+                layer.prompt({title: '第几次执行（计划内序号）', formType: 0}, function (seq, idx) {
+                    layer.close(idx);
+                    layer.prompt({title: '执行人', formType: 0}, function (who, idx2) {
+                        layer.close(idx2);
+                        post(MODULE_PATH + 'execute', {orderNo: no, doseSeq: seq, execBy: who});
+                    });
+                });
+            } else if (obj.event === 'transfer') {
+                // 医嘱随病人走：归属换边写移交流水，原科室清单即刻摘除
+                layer.prompt({title: '移交到哪个科室（当前 ' + obj.data.ownerDept + '）', formType: 0}, function (dept, idx) {
+                    layer.close(idx);
+                    layer.prompt({title: '移交操作人', formType: 0}, function (who, idx2) {
+                        layer.close(idx2);
+                        post(MODULE_PATH + 'transfer', {orderNo: no, toDept: dept, operator: who});
+                    });
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('住院医嘱录入')"/>
+</head>
+<body>
+<form class="layui-form">
+    <div class="mainBox">
+        <div class="main-container">
+            <div class="layui-form-item">
+                <label class="layui-form-label">患者底档代号</label>
+                <div class="layui-input-block">
+                    <input type="text" name="patientNo" lay-verify="required" autocomplete="off"
+                           placeholder="如 PT00" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">归属科室</label>
+                <div class="layui-input-block">
+                    <input type="text" name="ownerDept" lay-verify="required" autocomplete="off"
+                           placeholder="当前认领方；转科后随病人换边，任何时点只挂一头" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">闭环算法</label>
+                <div class="layui-input-block">
+                    <select name="orderType" id="orderType" lay-verify="required" lay-filter="orderType">
+                        <option value="1">按次数（可重复医嘱，次数凑齐才闭环）</option>
+                        <option value="2">按时段（过时段止且期内有有效执行才闭环）</option>
+                    </select>
+                </div>
+            </div>
+            <!-- 一张单只适用一种算法：按次数填次数，按时段填起止，页面也只露对应那半 -->
+            <div class="layui-form-item" id="box-count">
+                <label class="layui-form-label">应执行次数</label>
+                <div class="layui-input-block">
+                    <input type="number" name="needCount" autocomplete="off" min="1"
+                           placeholder="按次数型必填，>= 1" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item" id="box-period" style="display:none;">
+                <label class="layui-form-label">执行时段</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="periodStart" id="periodStart" autocomplete="off"
+                           placeholder="起（含）" class="layui-input">
+                </div>
+                <div class="layui-input-inline">
+                    <input type="text" name="periodEnd" id="periodEnd" autocomplete="off"
+                           placeholder="止（不含）" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">往年补录</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="backfill" value="true" lay-skin="switch" lay-text="是|否">
+                    <span style="color:#999;font-size:12px;">补录单审方发药从略；缺执行人的笔不自动闭环，补登后才算</span>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">开单医生</label>
+                <div class="layui-input-block">
+                    <input type="text" name="operator" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item" id="result-box" style="display:none;">
+                <label class="layui-form-label">落单结果</label>
+                <div class="layui-input-block">
+                    <table class="layui-table" style="margin-top:10px;">
+                        <tbody>
+                        <tr><td style="width:120px;">医嘱单号</td><td id="r-no"></td></tr>
+                        <tr><td>说明</td><td id="r-msg"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="button-container">
+            <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit="" lay-filter="order-create">
+                <i class="layui-icon layui-icon-ok"></i>
+                落单（之后走审方→发药→执行）
+            </button>
+            <button type="reset" class="layui-btn layui-btn-primary layui-btn-sm" id="btn-reset">
+                <i class="layui-icon layui-icon-refresh"></i>
+                重填
+            </button>
+        </div>
+    </div>
+</form>
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['form', 'jquery', 'laydate'], function () {
+        let form = layui.form;
+        let $ = layui.jquery;
+        let laydate = layui.laydate;
+        let MODULE_PATH = rootPath + "/MhOrderController";
+
+        laydate.render({elem: '#periodStart', type: 'datetime', format: 'yyyy-MM-dd HH:mm:ss'});
+        laydate.render({elem: '#periodEnd', type: 'datetime', format: 'yyyy-MM-dd HH:mm:ss'});
+
+        form.on('select(orderType)', function (data) {
+            $('#box-count').toggle(data.value === '1');
+            $('#box-period').toggle(data.value === '2');
+        });
+
+        $('#btn-reset').on('click', function () {
+            setTimeout(function () { $('#result-box').hide(); }, 10);
+        });
+
+        form.on('submit(order-create)', function (data) {
+            $.ajax({
+                url: MODULE_PATH + '/create',
+                data: data.field,
+                dataType: 'json',
+                type: 'post',
+                success: function (result) {
+                    if (result.code !== 200) {
+                        layer.msg(result.msg, {icon: 2, time: 2500});
+                        $('#result-box').hide();
+                        return;
+                    }
+                    let d = result.data || {};
+                    $('#result-box').show();
+                    $('#r-no').text(d.orderNo || '');
+                    $('#r-msg').text(result.msg || d.message || '');
+                    layer.msg('已落单', {icon: 1, time: 1200});
+                }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

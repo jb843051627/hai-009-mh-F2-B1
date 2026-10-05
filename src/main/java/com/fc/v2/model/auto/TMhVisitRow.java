@@ -45,25 +45,6 @@ public class TMhVisitRow implements Serializable {
     public static final int STATUS_REJECTED = 2;
 
     /** 主键 */
-    /** 导入批次号 */
-    @TableField("batch_no")
-    @ApiModelProperty(value = "导入批次号")
-    private String batchNo;
-
-    /** 原表行次 */
-    @TableField("row_no")
-    @ApiModelProperty(value = "原表行次")
-    private Integer rowNo;
-
-    /** 数据项代号 */
-    @TableField("item_code")
-    @ApiModelProperty(value = "数据项代号")
-    private String itemCode;
-
-    /** 本行数量 */
-    @TableField("qty")
-    @ApiModelProperty(value = "本行数量")
-    private BigDecimal qty;
     @TableId(type = IdType.ASSIGN_ID)
     @JsonSerialize(using = ToStringSerializer.class)
     @ApiModelProperty(value = "主键")
@@ -162,37 +143,6 @@ public class TMhVisitRow implements Serializable {
         this.id = id;
     }
 
-    public String getBatchNo() {
-        return batchNo;
-    }
-
-    public void setBatchNo(String batchNo) {
-        this.batchNo = batchNo;
-    }
-
-    public Integer getRowNo() {
-        return rowNo;
-    }
-
-    public void setRowNo(Integer rowNo) {
-        this.rowNo = rowNo;
-    }
-
-    public String getItemCode() {
-        return itemCode;
-    }
-
-    public void setItemCode(String itemCode) {
-        this.itemCode = itemCode;
-    }
-
-    public BigDecimal getQty() {
-        return qty;
-    }
-
-    public void setQty(BigDecimal qty) {
-        this.qty = qty;
-    }
     public String getTicketNo() {
         return ticketNo;
     }
